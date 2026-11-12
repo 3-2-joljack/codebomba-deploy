@@ -61,7 +61,7 @@ GOOGLE_CLIENT_SECRET=         # 선택
 |---|---|
 | `setup.sh` | Docker 확인, `repos/` 에 소스 클론(재실행 시 pull), `.env` 생성 |
 | `up.sh` | `PUBLIC_URL` 로 프록시/쿠키 설정 계산 → `docker compose up -d --build` → 헬스 대기 |
-| `seed.sh` | 레포의 시드 SQL 실행. 계정 비밀번호는 `.env` 의 `SEED_ACCOUNT_PASSWORD` 로 교체해 넣는다 |
+| `seed.sh` | 테스트 계정, 강좌 3개, 강의 12개, 문제세트 7개(문제 33개)를 넣는다. 계정 비밀번호는 `.env` 의 `SEED_ACCOUNT_PASSWORD` |
 | `ingest.sh` | 문제세트 임베딩 인덱스 생성 (개인화 추천용). 문제세트 등록 후 실행 |
 | `aws/power.sh` | (내 컴퓨터에서) 서버 중지/시작/상태 |
 | `aws/teardown.sh` | (내 컴퓨터에서) AWS 과금 자원 전체 삭제. 인자 없이 실행하면 조회만 |
@@ -73,7 +73,11 @@ GOOGLE_CLIENT_SECRET=         # 선택
 ## 알아둘 점
 
 - **DB 스키마**는 `DDL_AUTO=update` 로 Hibernate 가 엔티티에서 자동 생성한다.
-- **시드 데이터에는 테스트케이스, 강의, 데이터셋, 힌트, 배지가 없다.** 관리자 계정으로 직접 등록해야 채점과 수강이 된다.
+- **초기 콘텐츠**는 `content/build_content.py` 가 만든다. 문제마다 모범 답안과 오답을 실제로 실행해 테스트케이스를 검증한 뒤 `content/content.sql` 과 `content/datasets/*.csv` 를 쓴다.
+  - 정처기 실기: 파이썬 출력 결과, 기초 코딩, 기초 알고리즘, SQL 작성(sqlite 로 실제 실행 채점), 핵심 용어 단답
+  - pandas 데이터 분석: 카페 주문, 쇼핑몰 주문 (데이터셋 CSV 는 S3 `problem_dataset/seed/` 에 올려 둔다)
+  - 내용을 바꾸면 채점 러너와 같은 버전(pandas 2.2.3)에서 `python content/build_content.py` 를 다시 실행하고, CSV 가 바뀌었으면 S3 에도 다시 올린다.
+- 원본 레포의 `sql/problems.sql`, `db/seed/20_course.sql` 은 쓰지 않는다. 문제 시드는 실제 테이블에 없는 컬럼을 넣어 실패한다.
 - **구글 로그인**은 공인 IP 주소로는 안 되고 HTTPS 도메인이 필요하다.
 - **PUBLIC_URL 이나 S3_BUCKET 을 바꾸면** 프론트엔드를 다시 빌드해야 한다 (`./up.sh` 가 처리).
 - **모니터링**(Prometheus/Loki/Grafana)은 이 구성에 넣지 않았다.
