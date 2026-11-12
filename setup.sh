@@ -12,7 +12,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 docker compose version >/dev/null
 
-mkdir -p repos secrets
+mkdir -p repos
 for r in codebomba-LMS-BackEnd codebomba-LMS-FrontEnd codebomba-Python-Server; do
   if [ -d "repos/$r/.git" ]; then
     git -C "repos/$r" pull --ff-only
@@ -46,8 +46,7 @@ fi
 cat <<'MSG'
 
 다음 순서:
-  1) .env 를 열어 위쪽 값(PUBLIC_URL, GEMINI_API_KEY, GCP_*, MAIL_*)을 채운다
-  2) GCP 서비스 계정 키를 secrets/gcp-storage-key.json 으로 저장한다
-  3) ./up.sh
-  4) (선택) ./seed.sh   테스트 계정과 기본 카테고리/문제 넣기
+  1) .env 를 열어 위쪽 값(PUBLIC_URL, GEMINI_API_KEY, MAIL_*)을 채운다
+  2) ./up.sh
+  3) (선택) ./seed.sh   테스트 계정과 기본 카테고리/문제 넣기
 MSG

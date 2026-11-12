@@ -17,7 +17,6 @@ case "$PUBLIC_URL" in
 esac
 export PUBLIC_URL
 
-[ -s secrets/gcp-storage-key.json ] || echo "경고: secrets/gcp-storage-key.json 없음 → 데이터셋/썸네일/강의자료 업로드가 실패합니다"
 [ -n "$(val MAIL_PASSWORD)" ]       || echo "경고: MAIL_* 없음 → 회원가입 인증 메일이 발송되지 않습니다"
 [ -n "$(val GOOGLE_CLIENT_ID)" ]    || echo "참고: GOOGLE_CLIENT_* 없음 → 구글 로그인 비활성"
 

@@ -16,6 +16,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on: [frontend, spring]
+    extra_hosts: ["spring:host-gateway"]
     networks: [app]
 
   frontend:
@@ -25,7 +26,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ""                       # 브라우저는 상대경로 /api → caddy → spring
         NEXT_PUBLIC_SITE_URL: ${PUBLIC_URL}
-        NEXT_IMAGE_REMOTE_PATTERNS: https://storage.googleapis.com/${GCP_STORAGE_BUCKET:-codebombalms}
+        NEXT_IMAGE_REMOTE_PATTERNS: https://${S3_BUCKET:-codebomba-lms-379959319287}.s3.${AWS_REGION:-ap-northeast-2}.amazonaws.com
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -34,27 +35,31 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       API_PROXY_TARGET: http://spring:8080            # 서버 컴포넌트(SSR) 전용
     depends_on: [spring]
+    extra_hosts: ["spring:host-gateway"]
     networks: [app]
 
   spring:
     build:
       context: ./repos/codebomba-LMS-BackEnd
     restart: unless-stopped
+    # 호스트 네트워크: EC2 인스턴스 역할 자격 증명(IMDS)을 spring 만 읽게 하기 위함.
+    # 브리지 컨테이너(학생 코드를 돌리는 runner 포함)는 IMDS 홉 제한 1 때문에 역할 자격 증명에 닿지 못한다.
+    network_mode: host
     environment:
       SPRING_PROFILES_ACTIVE: deploy
       DDL_AUTO: ${DDL_AUTO:-update}
-      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-lms}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_URL: jdbc:mysql://127.0.0.1:3306/${DB_NAME:-lms}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
       DB_USERNAME: ${DB_USERNAME:-lms}
       DB_PASSWORD: ${DB_PASSWORD}
-      REDIS_HOST: redis
+      REDIS_HOST: 127.0.0.1
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
       CORS_ALLOWED_ORIGINS: ${PUBLIC_URL}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      FASTAPI_URL: http://python-ai:8000
-      CODE_RUNNER_CLOUD_RUN_ENDPOINT: http://runner:8080/execute
+      FASTAPI_URL: http://127.0.0.1:8000
+      CODE_RUNNER_CLOUD_RUN_ENDPOINT: http://127.0.0.1:8081/execute
       BRIEFING_PROVIDER: gemini
       BRIEFING_API_KEY: ${GEMINI_API_KEY}
       # 메일 (비우면 인증 메일 발송만 실패, 서버는 뜬다)
@@ -67,18 +72,14 @@ services:
       OAUTH_ADDITIONAL_INFO_URI: ${PUBLIC_URL}/oauth2/additional-info
       OAUTH_SUCCESS_URI: ${PUBLIC_URL}
       OAUTH_ERROR_URI: ${PUBLIC_URL}/auth/login
-      # GCS (키 파일은 ./secrets/gcp-storage-key.json)
-      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-unset-project}
-      GCP_STORAGE_BUCKET: ${GCP_STORAGE_BUCKET:-codebombalms}
-      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-storage-key.json
-    volumes:
-      - ./secrets:/app/secrets:ro
+      # 파일 저장소 S3 — 키 없음. EC2 인스턴스 역할(codebomba-ec2-ssm)로 접근
+      S3_BUCKET: ${S3_BUCKET:-codebomba-lms-379959319287}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_started
-    networks: [app, runner]
     logging: &logging
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -98,12 +99,17 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_BASE_URL: http://spring:8080
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      # AI 문제 초안 생성이 내려받을 수 있는 데이터셋 호스트
+      ALLOWED_DATASET_URL_HOSTS: ${S3_BUCKET:-codebomba-lms-379959319287}.s3.${AWS_REGION:-ap-northeast-2}.amazonaws.com
+    ports:
+      - "127.0.0.1:8000:8000"          # spring(호스트 네트워크)만 접근
+    extra_hosts: ["spring:host-gateway"]
     volumes:
       - learning-chroma:/app/.chroma
     depends_on:
       mysql:
         condition: service_healthy
-    networks: [app]          # 포트 미노출 — spring 만 접근
+    networks: [app]
     logging: *logging
 
   runner:
@@ -113,6 +119,8 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8080"
+    ports:
+      - "127.0.0.1:8081:8080"          # spring(호스트 네트워크)만 접근
     mem_limit: 1g
     cpus: 1.0
     pids_limit: 256
@@ -140,14 +148,18 @@ services:
       timeout: 5s
       retries: 30
       start_period: 20s
-    networks: [app]          # 포트 미노출
+    ports:
+      - "127.0.0.1:3306:3306"          # 호스트 로컬에만 바인딩 (외부 비노출)
+    networks: [app]
     logging: *logging
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
-    networks: [app]          # 포트 미노출
+    ports:
+      - "127.0.0.1:6379:6379"          # 호스트 로컬에만 바인딩 (외부 비노출)
+    networks: [app]
     logging: *logging
 
 networks:
