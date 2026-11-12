@@ -1,0 +1,161 @@
+# 코드봄바 LMS — 서버 한 대 통합 구성
+# 실행은 ./up.sh 로 한다 (PUBLIC_URL 에서 SITE_ADDRESS, COOKIE_SECURE 를 계산해 넘긴다).
+name: codebomba
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [frontend, spring]
+    networks: [app]
+
+  frontend:
+    build:
+      context: ./repos/codebomba-LMS-FrontEnd
+      dockerfile: ../../docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""                       # 브라우저는 상대경로 /api → caddy → spring
+        NEXT_PUBLIC_SITE_URL: ${PUBLIC_URL}
+        NEXT_IMAGE_REMOTE_PATTERNS: https://storage.googleapis.com/${GCP_STORAGE_BUCKET:-codebombalms}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      API_PROXY_TARGET: http://spring:8080            # 서버 컴포넌트(SSR) 전용
+    depends_on: [spring]
+    networks: [app]
+
+  spring:
+    build:
+      context: ./repos/codebomba-LMS-BackEnd
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: deploy
+      DDL_AUTO: ${DDL_AUTO:-update}
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-lms}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${DB_USERNAME:-lms}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_URL}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      FASTAPI_URL: http://python-ai:8000
+      CODE_RUNNER_CLOUD_RUN_ENDPOINT: http://runner:8080/execute
+      BRIEFING_PROVIDER: gemini
+      BRIEFING_API_KEY: ${GEMINI_API_KEY}
+      # 메일 (비우면 인증 메일 발송만 실패, 서버는 뜬다)
+      MAIL_USERNAME: ${MAIL_USERNAME:-unset@example.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-unset}
+      # 구글 로그인 (비우면 구글 로그인만 실패)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-unset}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-unset}
+      GOOGLE_REDIRECT_URI: ${PUBLIC_URL}/api/v1/auth/oauth2/callback/google
+      OAUTH_ADDITIONAL_INFO_URI: ${PUBLIC_URL}/oauth2/additional-info
+      OAUTH_SUCCESS_URI: ${PUBLIC_URL}
+      OAUTH_ERROR_URI: ${PUBLIC_URL}/auth/login
+      # GCS (키 파일은 ./secrets/gcp-storage-key.json)
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-unset-project}
+      GCP_STORAGE_BUCKET: ${GCP_STORAGE_BUCKET:-codebombalms}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-storage-key.json
+    volumes:
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks: [app, runner]
+    logging: &logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  python-ai:
+    build:
+      context: ./repos/codebomba-Python-Server
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      GEMINI_REASON_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-lms}
+      DB_USERNAME: ${DB_USERNAME:-lms}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_BASE_URL: http://spring:8080
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+    volumes:
+      - learning-chroma:/app/.chroma
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [app]          # 포트 미노출 — spring 만 접근
+    logging: *logging
+
+  runner:
+    # 학생 코드를 실행하는 채점 러너. DB/Redis 가 있는 app 네트워크와 분리한다.
+    build:
+      context: ./repos/codebomba-LMS-BackEnd/python-runner
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    networks: [runner]
+    logging: *logging
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+09:00
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-lms}
+      MYSQL_USER: ${DB_USERNAME:-lms}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks: [app]          # 포트 미노출
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    networks: [app]          # 포트 미노출
+    logging: *logging
+
+networks:
+  app:
+  runner:
+
+volumes:
+  mysql-data:
+  learning-chroma:
+  caddy-data:
+  caddy-config:

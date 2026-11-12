@@ -1,0 +1,18 @@
+# SITE_ADDRESS 는 up.sh 가 PUBLIC_URL 에서 계산한다.
+#   http://1.2.3.4        → ":80"          (HTTP)
+#   https://my.domain.com → "my.domain.com" (Let's Encrypt 자동 HTTPS)
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# 백엔드 API. /internal, /actuator 는 일부러 프록시하지 않는다 (외부 비노출).
+	@backend path /api/* /uploads/*
+	handle @backend {
+		reverse_proxy spring:8080 {
+			flush_interval -1   # 챗봇 SSE 스트리밍 버퍼링 방지
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
