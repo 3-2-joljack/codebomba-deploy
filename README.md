@@ -19,7 +19,7 @@ GitHub Secrets, ECR 설정이 필요 없다. 서버에서 소스를 직접 빌�
 | EC2 | Ubuntu 24.04, 메모리 8GB 권장, 디스크 30GB, 80/443 개방, IMDSv2 필수 | 필수 |
 | S3 버킷 + EC2 인스턴스 역할 | 버킷에 Get/Put/Delete 권한을 가진 역할을 인스턴스에 연결 | 필수 |
 | `GEMINI_API_KEY` | https://aistudio.google.com/apikey | 필수 |
-| Gmail 주소 + 앱 비밀번호 | 구글 계정 → 보안 → 2단계 인증 → 앱 비밀번호 | 회원가입 인증 메일에 필요 |
+| Gmail 주소 + 앱 비밀번호 | 구글 계정 → 보안 → 2단계 인증 → 앱 비밀번호 | 선택 (이메일 인증을 켜거나 비밀번호 찾기를 쓸 때) |
 | 구글 OAuth 클라이언트 ID/시크릿 | 구글 클라우드 콘솔 → 사용자 인증 정보 | 선택 (HTTPS 도메인 필요) |
 | 도메인 | 서버 IP 로 A 레코드 | 선택 (없으면 http://IP) |
 
@@ -78,6 +78,7 @@ GOOGLE_CLIENT_SECRET=         # 선택
   - pandas 데이터 분석: 카페 주문, 쇼핑몰 주문 (데이터셋 CSV 는 S3 `problem_dataset/seed/` 에 올려 둔다)
   - 내용을 바꾸면 채점 러너와 같은 버전(pandas 2.2.3)에서 `python content/build_content.py` 를 다시 실행하고, CSV 가 바뀌었으면 S3 에도 다시 올린다.
 - 원본 레포의 `sql/problems.sql`, `db/seed/20_course.sql` 은 쓰지 않는다. 문제 시드는 실제 테이블에 없는 컬럼을 넣어 실패한다.
+- **이메일 인증은 기본으로 꺼져 있다.** 회원가입 때 인증번호를 묻지 않고, 학생이 새 기기에서 로그인해도 이메일 OTP 없이 들어간다. 켜려면 `.env` 에 `EMAIL_VERIFICATION_ENABLED=true` 와 `MAIL_*` 를 넣고 `./up.sh`. 비밀번호 찾기는 메일로 코드를 보내므로 `MAIL_*` 가 있어야 동작한다.
 - **구글 로그인**은 공인 IP 주소로는 안 되고 HTTPS 도메인이 필요하다.
 - **PUBLIC_URL 이나 S3_BUCKET 을 바꾸면** 프론트엔드를 다시 빌드해야 한다 (`./up.sh` 가 처리).
 - **모니터링**(Prometheus/Loki/Grafana)은 이 구성에 넣지 않았다.

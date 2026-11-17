@@ -17,7 +17,11 @@ case "$PUBLIC_URL" in
 esac
 export PUBLIC_URL
 
-[ -n "$(val MAIL_PASSWORD)" ]       || echo "경고: MAIL_* 없음 → 회원가입 인증 메일이 발송되지 않습니다"
+if [ "$(val EMAIL_VERIFICATION_ENABLED)" = "true" ]; then
+  [ -n "$(val MAIL_PASSWORD)" ] || echo "경고: 이메일 인증이 켜져 있는데 MAIL_* 가 없습니다 → 가입과 학생 로그인이 막힙니다"
+else
+  echo "참고: 이메일 인증 꺼짐 → 인증번호 없이 가입, 새 기기에서도 바로 로그인 (비밀번호 찾기 메일은 MAIL_* 필요)"
+fi
 [ -n "$(val GOOGLE_CLIENT_ID)" ]    || echo "참고: GOOGLE_CLIENT_* 없음 → 구글 로그인 비활성"
 
 docker compose up -d --build "$@"
