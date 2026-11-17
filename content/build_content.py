@@ -29,6 +29,8 @@ DATASET_DIR = HERE / "datasets"
 BUCKET = os.environ.get("S3_BUCKET", "codebomba-lms-379959319287")
 REGION = os.environ.get("AWS_REGION", "ap-northeast-2")
 S3_PREFIX = "problem_dataset/seed"
+# 강좌 썸네일: content/build_thumbnails.py 로 만들어 S3 공개 prefix 에 올려 둔다. (SVG 는 next/image 가 거부한다)
+THUMBNAILS = f"https://{BUCKET}.s3.{REGION}.amazonaws.com/course_thumbnail_images/seed/"
 OPERATOR_ID = 8  # 시드 계정 op@test.com (OPERATOR)
 
 LOAD = 'import os\nimport pandas as pd\n\ndf = pd.read_csv(os.environ["DATASET_PATH"])\n'
@@ -632,13 +634,13 @@ CATEGORIES = [
 COURSES = [
     (2000, 1002, "정보처리기사 실기 대비: 파이썬 프로그래밍",
      "정보처리기사 실기의 프로그래밍 언어 활용 영역을 파이썬으로 준비합니다. 출력 결과 예측부터 기초 알고리즘 구현까지 단계별로 연습합니다.",
-     "https://placehold.co/640x360?text=Python+for+Exam"),
+     THUMBNAILS + "course-2000-python.png"),
     (2001, 1003, "정보처리기사 실기 대비: SQL과 핵심 이론",
      "SELECT, GROUP BY, JOIN 등 SQL 작성 문제와 응집도, 결합도, OSI 7계층 같은 단골 이론을 함께 정리합니다.",
-     "https://placehold.co/640x360?text=SQL+and+Theory"),
+     THUMBNAILS + "course-2001-sql.png"),
     (2002, 1000, "처음 시작하는 pandas 데이터 분석",
      "Python pandas로 CSV 데이터를 불러오고, 기본 탐색과 그룹 집계까지 실습하는 입문 강좌입니다.",
-     "https://placehold.co/640x360?text=Pandas+Data+Analysis"),
+     THUMBNAILS + "course-2002-pandas.png"),
 ]
 
 # (lecture_id, course_id, order, title, description, youtube_id, problem_category_id, main_problem_set_id)
